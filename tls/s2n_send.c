@@ -50,6 +50,9 @@ int s2n_flush(struct s2n_connection *conn, int *more)
         GUARD(s2n_connection_wipe(conn));
     }
     GUARD(s2n_stuffer_rewrite(&conn->out));
+    /* prepare stuffer for next write */
+    GUARD(s2n_stuffer_wipe(&conn->out));
+
 
     /* If there's an alert pending out, send that */
     if (s2n_stuffer_data_available(&conn->reader_alert_out) == 2) {
@@ -82,6 +85,63 @@ int s2n_flush(struct s2n_connection *conn, int *more)
     return 0;
 }
 
+/*
+ * Dynamically adjust the record size for latency / throughput.The dynamic adjustment
+ * is based on three parameters (bytes_out, idle_time, max_fragment_size). When the
+ * connection initially starts, we optimize for latency by using a small record size,
+ * usually (Ethernet MTU - IP/TCP overhead). As the connection progresses and bytes_out
+ * goes beyond a threshold, we switch to a bigger record size, which is capped by
+ * max_fragment_size param for high throughput. During the steady state, if the connection
+ * becomes idle for beyond idle_millis_threshold, the record size will go back to the
+ * initial size. This is to account for tcp slow start restarts.
+ */
+int adjust_record_size_if_needed(struct s2n_connection *conn, uint64_t idle_time_nanos)
+{
+    uint16_t curr_fragment_size = conn->curr_max_fragment_size;
+    uint16_t new_fragment_size = curr_fragment_size;
+    uint32_t bytes_out = conn->dyn_record_sz_bytes_out;
+    struct s2n_dyn_record_size_config *config = &conn->config->dyn_record_size;
+
+    if (curr_fragment_size == config->max_fragment_size) {
+        /*
+         * Shrink the max fragment size if the connection has been
+         * idle for a while. TCP Slow Start Restart shrinks the cwnd
+         * after long idle periods.
+         */
+        uint32_t elapsed_millis = idle_time_nanos / 1000000;
+        if (elapsed_millis >= config->idle_millis_threshold) {
+            new_fragment_size = S2N_DEFAULT_FRAGMENT_LENGTH;
+            conn->dyn_record_sz_bytes_out = 0;
+        }
+    } else if (bytes_out >= config->bytes_out_threshold) {
+        /*
+         * Enough bytes have been transferred out for the cwnd
+         * to grow beyond max_fragment_size. Increase the max
+         * fragment size to optimize for throughput
+         */
+        new_fragment_size = config->max_fragment_size;
+    }
+
+    if (new_fragment_size != curr_fragment_size) {
+        uint32_t new_blob_size = s2n_tls_record_length(new_fragment_size);
+        if (s2n_stuffer_resize(&conn->out, new_blob_size) < 0) {
+            if (s2n_errno == S2N_ERR_REALLOC) {
+                /*
+                 * If realloc() fails, we don't want to
+                 * bail this connection. Dynamic record
+                 * sizing is best effort.
+                 */
+                return 0;
+            }
+            printf("s2n_stuffer_resize failed\n");
+            return -1;
+        }
+        conn->curr_max_fragment_size = new_fragment_size;
+    }
+
+    return 0;
+}
+
 ssize_t s2n_send(struct s2n_connection *conn, void *buf, ssize_t size, int *more)
 {
     struct s2n_blob in = {.data = buf };
@@ -97,6 +157,10 @@ ssize_t s2n_send(struct s2n_connection *conn, void *buf, ssize_t size, int *more
     GUARD(s2n_flush(conn, more));
 
     *more = 1;
+
+    uint64_t elapsed_nanos = 0;
+    s2n_timer_reset(&conn->write_idle_timer, &elapsed_nanos);
+    GUARD(adjust_record_size_if_needed(conn, elapsed_nanos));
 
     GUARD((max_payload_size = s2n_record_max_write_payload_size(conn)));
 
@@ -125,6 +189,7 @@ ssize_t s2n_send(struct s2n_connection *conn, void *buf, ssize_t size, int *more
         GUARD(s2n_record_write(conn, TLS_APPLICATION_DATA, &in));
 
         bytes_written += in.size;
+        conn->dyn_record_sz_bytes_out += in.size;
 
         /* Send it */
         while (s2n_stuffer_data_available(&conn->out)) {

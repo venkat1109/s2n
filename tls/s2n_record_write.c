@@ -60,7 +60,7 @@ static uint16_t overhead(struct s2n_connection *conn)
 
 int s2n_record_max_write_payload_size(struct s2n_connection *conn)
 {
-    uint16_t max_fragment_size = conn->max_fragment_length;
+    uint16_t max_fragment_size = conn->curr_max_fragment_size;
     struct s2n_crypto_parameters *active = conn->server;
 
     if (conn->mode == S2N_CLIENT) {
@@ -106,7 +106,7 @@ int s2n_record_write(struct s2n_connection *conn, uint8_t content_type, struct s
     gte_check(mac_digest_size, 0);
 
     /* Before we do anything, we need to figure out what the length of the
-     * fragment is going to be. 
+     * fragment is going to be.
      */
     uint16_t data_bytes_to_take = in->size;
     if (data_bytes_to_take > s2n_record_max_write_payload_size(conn)) {
@@ -253,7 +253,7 @@ int s2n_record_write(struct s2n_connection *conn, uint8_t content_type, struct s
         break;
     }
 
-    conn->wire_bytes_out += actual_fragment_length + S2N_TLS_RECORD_HEADER_LENGTH;
+    conn->wire_bytes_out += s2n_tls_record_length(actual_fragment_length);;
 
     return data_bytes_to_take;
 }

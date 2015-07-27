@@ -81,16 +81,16 @@ struct s2n_connection *s2n_connection_new(s2n_mode mode)
     blob.size = S2N_ALERT_LENGTH;
 
     GUARD_PTR(s2n_stuffer_init(&conn->writer_alert_out, &blob));
-    GUARD_PTR(s2n_stuffer_alloc(&conn->out, S2N_DEFAULT_RECORD_LENGTH));
 
     /* Initialize the growable stuffers. Zero length at first, but the resize
-     * in _wipe will fix that 
+     * in _wipe will fix that
      */
     blob.data = conn->header_in_data;
     blob.size = S2N_TLS_RECORD_HEADER_LENGTH;
 
     GUARD_PTR(s2n_stuffer_init(&conn->header_in, &blob));
     GUARD_PTR(s2n_stuffer_growable_alloc(&conn->in, 0));
+    GUARD_PTR(s2n_stuffer_growable_alloc(&conn->out, 0));
     GUARD_PTR(s2n_stuffer_growable_alloc(&conn->handshake.io, 0));
     GUARD_PTR(s2n_connection_wipe(conn));
 
@@ -186,6 +186,7 @@ int s2n_connection_wipe(struct s2n_connection *conn)
 
     /* Allocate or resize to their original sizes */
     GUARD(s2n_stuffer_resize(&conn->in, S2N_DEFAULT_FRAGMENT_LENGTH));
+    GUARD(s2n_stuffer_resize(&conn->out, s2n_tls_record_length(S2N_DEFAULT_FRAGMENT_LENGTH)));
 
     /* Allocate memory for handling handshakes */
     GUARD(s2n_stuffer_resize(&conn->handshake.io, S2N_DEFAULT_RECORD_LENGTH));
@@ -212,8 +213,8 @@ int s2n_connection_wipe(struct s2n_connection *conn)
     conn->pending.cipher_suite = &s2n_null_cipher_suite;
     conn->server = &conn->active;
     conn->client = &conn->active;
-    conn->max_fragment_length = S2N_DEFAULT_FRAGMENT_LENGTH;
     conn->handshake.state = CLIENT_HELLO;
+    conn->curr_max_fragment_size = S2N_DEFAULT_FRAGMENT_LENGTH;
     GUARD(s2n_hash_init(&conn->handshake.client_md5, S2N_HASH_MD5));
     GUARD(s2n_hash_init(&conn->handshake.client_sha1, S2N_HASH_SHA1));
     GUARD(s2n_hash_init(&conn->handshake.client_sha256, S2N_HASH_SHA256));

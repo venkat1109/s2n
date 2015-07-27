@@ -56,6 +56,7 @@ int main(int argc, char **argv)
     EXPECT_SUCCESS(s2n_hmac_init(&conn->active.client_record_mac, S2N_HMAC_SHA1, mac_key, sizeof(mac_key)));
     EXPECT_SUCCESS(s2n_hmac_init(&conn->active.server_record_mac, S2N_HMAC_SHA1, mac_key, sizeof(mac_key)));
     conn->actual_protocol_version = S2N_TLS11;
+    conn->config->dyn_record_size.max_fragment_size = S2N_TLS_MAXIMUM_FRAGMENT_LENGTH;
 
     for (int i = 0; i <= S2N_DEFAULT_FRAGMENT_LENGTH + 1; i++) {
         struct s2n_blob in = {.data = random_data,.size = i };

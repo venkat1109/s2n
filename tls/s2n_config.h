@@ -36,12 +36,22 @@ struct s2n_cert_chain_and_key {
     char server_name[S2N_MAX_SERVER_NAME];
 };
 
+struct s2n_dyn_record_size_config {
+	// Expand to max record size after this threshold
+	uint32_t bytes_out_threshold;
+	// Shrink back to min_record_size after being idle
+	uint32_t idle_millis_threshold;
+	// Max allowed fragment size
+	uint16_t max_fragment_size;
+};
+
 struct s2n_config {
     struct s2n_dh_params *dhparams;
     struct s2n_cert_chain_and_key *cert_and_key_pairs;
     struct s2n_cipher_preferences *cipher_preferences;
     struct s2n_blob application_protocols;
     s2n_status_request_type status_request_type;
+    struct s2n_dyn_record_size_config dyn_record_size;
 };
 
 extern struct s2n_config s2n_default_config;

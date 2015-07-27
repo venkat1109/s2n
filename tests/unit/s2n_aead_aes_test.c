@@ -59,6 +59,7 @@ int main(int argc, char **argv)
     EXPECT_SUCCESS(s2n_hmac_init(&conn->active.client_record_mac, S2N_HMAC_SHA1, mac_key, sizeof(mac_key)));
     EXPECT_SUCCESS(s2n_hmac_init(&conn->active.server_record_mac, S2N_HMAC_SHA1, mac_key, sizeof(mac_key)));
     conn->actual_protocol_version = S2N_TLS12;
+    conn->config->dyn_record_size.max_fragment_size = S2N_TLS_MAXIMUM_FRAGMENT_LENGTH;
 
     int max_fragment = S2N_DEFAULT_FRAGMENT_LENGTH;
     for (int i = 0; i < max_fragment; i++) {
@@ -385,4 +386,3 @@ int main(int argc, char **argv)
 
     END_TEST();
 }
-

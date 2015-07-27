@@ -95,7 +95,12 @@ struct {
 
 struct s2n_config s2n_default_config = {
     .cert_and_key_pairs = NULL,
-    .cipher_preferences = &cipher_preferences_20150306
+    .cipher_preferences = &cipher_preferences_20150306,
+    .dyn_record_size = {
+        .bytes_out_threshold = 1024 * 1024,
+        .idle_millis_threshold= 1000,
+        .max_fragment_size = S2N_TLS_MAXIMUM_FRAGMENT_LENGTH
+    }
 };
 
 struct s2n_config *s2n_config_new(void)
@@ -111,6 +116,7 @@ struct s2n_config *s2n_config_new(void)
     new_config->application_protocols.data = NULL;
     new_config->application_protocols.size = 0;
     new_config->status_request_type = S2N_STATUS_REQUEST_NONE;
+    new_config->dyn_record_size = s2n_default_config.dyn_record_size;
 
     GUARD_PTR(s2n_config_set_cipher_preferences(new_config, "default"));
 

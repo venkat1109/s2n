@@ -119,6 +119,7 @@ int main(int argc, char **argv)
     EXPECT_SUCCESS(s2n_hmac_init(&conn->active.server_record_mac, S2N_HMAC_SHA1, mac_key, sizeof(mac_key)));
     conn->active.cipher_suite = &s2n_null_cipher_suite;
     conn->actual_protocol_version = S2N_TLS11;
+    conn->config->dyn_record_size.max_fragment_size = S2N_TLS_MAXIMUM_FRAGMENT_LENGTH;
 
     for (int i = 0; i <= S2N_DEFAULT_FRAGMENT_LENGTH + 1; i++) {
         struct s2n_blob in = {.data = random_data,.size = i };
@@ -181,7 +182,7 @@ int main(int argc, char **argv)
         memcpy(conn->server->client_sequence_number, original_seq_num, 8);
 
         /* Deliberately corrupt a byte of the output and check that the record
-         * won't parse 
+         * won't parse
          */
         uint32_t byte_to_corrupt;
         EXPECT_SUCCESS(byte_to_corrupt = s2n_public_random(fragment_length));

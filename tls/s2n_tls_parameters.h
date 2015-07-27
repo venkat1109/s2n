@@ -83,7 +83,7 @@
 /* The maximum size of an SSL2 message is 2^14 - 1, as neither of the first two
  * bits in the length field are usable. Per;
  * http://www-archive.mozilla.org/projects/security/pki/nss/ssl/draft02.html
- * section 1.1 
+ * section 1.1
  */
 #define S2N_SSL2_RECORD_HEADER_LENGTH   2
 #define S2N_SSL2_MAXIMUM_MESSAGE_LENGTH 16383
@@ -103,3 +103,8 @@
 
 /* Handshake messages have their own header too */
 #define TLS_HANDSHAKE_HEADER_LENGTH   4
+
+static inline uint32_t s2n_tls_record_length(uint16_t fragment_length)
+{
+    return fragment_length + S2N_TLS_RECORD_HEADER_LENGTH;
+}
