@@ -95,12 +95,14 @@ int s2n_flush(struct s2n_connection *conn, int *more)
  * becomes idle for beyond idle_millis_threshold, the record size will go back to the
  * initial size. This is to account for tcp slow start restarts.
  */
-int adjust_record_size_if_needed(struct s2n_connection *conn, uint64_t idle_time_nanos)
+int adjust_record_size_if_needed(struct s2n_connection *conn)
 {
     uint16_t curr_fragment_size = conn->curr_max_fragment_size;
     uint16_t new_fragment_size = curr_fragment_size;
     uint32_t bytes_out = conn->dyn_record_sz_bytes_out;
     struct s2n_dyn_record_size_config *config = &conn->config->dyn_record_size;
+
+    uint64_t elapsed_nanos = 0;
 
     if (curr_fragment_size == config->max_fragment_size) {
         /*
@@ -108,7 +110,8 @@ int adjust_record_size_if_needed(struct s2n_connection *conn, uint64_t idle_time
          * idle for a while. TCP Slow Start Restart shrinks the cwnd
          * after long idle periods.
          */
-        uint32_t elapsed_millis = idle_time_nanos / 1000000;
+        s2n_timer_reset(&conn->write_idle_timer, &elapsed_nanos);
+        uint32_t elapsed_millis = elapsed_nanos / 1000000;
         if (elapsed_millis >= config->idle_millis_threshold) {
             new_fragment_size = S2N_DEFAULT_FRAGMENT_LENGTH;
             conn->dyn_record_sz_bytes_out = 0;
@@ -120,6 +123,7 @@ int adjust_record_size_if_needed(struct s2n_connection *conn, uint64_t idle_time
          * fragment size to optimize for throughput
          */
         new_fragment_size = config->max_fragment_size;
+        s2n_timer_reset(&conn->write_idle_timer, &elapsed_nanos);
     }
 
     if (new_fragment_size != curr_fragment_size) {
@@ -133,7 +137,6 @@ int adjust_record_size_if_needed(struct s2n_connection *conn, uint64_t idle_time
                  */
                 return 0;
             }
-            printf("s2n_stuffer_resize failed\n");
             return -1;
         }
         conn->curr_max_fragment_size = new_fragment_size;
@@ -158,9 +161,7 @@ ssize_t s2n_send(struct s2n_connection *conn, void *buf, ssize_t size, int *more
 
     *more = 1;
 
-    uint64_t elapsed_nanos = 0;
-    s2n_timer_reset(&conn->write_idle_timer, &elapsed_nanos);
-    GUARD(adjust_record_size_if_needed(conn, elapsed_nanos));
+    GUARD(adjust_record_size_if_needed(conn));
 
     GUARD((max_payload_size = s2n_record_max_write_payload_size(conn)));
 
